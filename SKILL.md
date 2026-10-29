@@ -41,9 +41,18 @@ python scripts/video_to_pdf.py "./conference.mp4" --chapters examples/chapters.e
 - `--chapters` 使用权威 JSON 时间点。可选 `--auto-chapters` 只能基于明显的视觉重置生成**低置信度章节建议**，不能凭空识别讲者、主题或议程，结果必须复核。
 - 处理视频和上传 PDF 是不同授权：若用户只要求生成 PDF，不要把源视频或 PDF 传到第三方服务。
 
+## Website access and separate agent authorization (mandatory)
+
+- **A user being signed in on their own device/browser does NOT mean the agent is signed in.** Never assume access to the user's Chrome/Edge cookies or to their existing browser window. A GitHub Skill installation does not grant account access.
+- First determine whether the executing agent actually has a supported interactive browser and can run the needed local video processing commands. When it does not, do **not** pretend to have visited or downloaded website content. Offer the local-file path or a private, local HAR workflow instead.
+- When an authorized website requires sign-in, have the agent open the site in a browser **it can actually access**, and ask the user to perform the normal login/MFA in that exact browser. Never request the user's password, cookie, JWT, or one-time code in chat.
+- This Skill's `authenticated_video.py browser` mode launches a **separate Playwright browser profile**. Even if the agent has its own cloud/desktop browser session, its cookies do not automatically transfer to this separate local browser or downloader. The user may have to authorize the browser that the script actually launched. If the agent cannot share the authorized session with the downloader, report the limitation and use an authorized local file instead.
+- HAR mode is a fallback for a trusted **local** agent: the user exports the network trace after logging into their *own* browser, and the local script reads it from the local private filesystem. A HAR may contain active session credentials and must not be uploaded to public chat, shared with colleagues, or committed to GitHub. A remote/cloud agent cannot read the user's local HAR unless a separate, deliberately authorized transfer is supported and appropriate.
+- Before accessing additional session URLs by a pattern, require an explicit user-provided authorized session list, preview the candidates, and obtain approval before bulk downloading. Playback access is not a blanket license to download; honor the site's restrictions. Uploading to any external service requires separate authorization.
+
 ## 授权网页视频：EADV 等需登录的视频网站（v1.3）
 
-用户已正常登录但需要从开发者工具中查找视频请求时，使用 `scripts/authenticated_video.py`，不要把登录密码放进命令或 Git。
+仅在用户已对实际运行的浏览器或本地下载环境完成授权后，才使用 `scripts/authenticated_video.py`，不要把登录密码放进命令或 Git。
 
 ```bash
 # 先在浏览器中正常登录并播放视频，然后导出本地网络 HAR：
@@ -58,7 +67,7 @@ python scripts/authenticated_video.py browser --url "https://portal.example.org/
 
 媒体域名由用户确认并明确允许；HAR 和浏览器 profile 可能包含登录数据，**绝不上传或共享**。脚本只记录脱敏任务结果。遇 401/403 需由用户重新登录并播放，不绕过 DRM 或站点授权。HLS/DASH 目前仅标记不支持。详细步骤见 [references/authenticated-sources.md](references/authenticated-sources.md)。
 
-## 从一场真实视频地址推导用户提供的其他场次（v1.3.1）
+## Reuse a verified address pattern for authorized sessions (v1.3.1)
 
 用户在 EADV 一类网站中，已登录播放一场视频，且希望根据明确提供的其他场次编号批量下载时，优先检查视频 URL 是否具有相同的路径结构。**不要随意把播放器网页地址后缀改成 .mp4**；必须基于在 HAR 中已观察到的真实媒体请求。
 

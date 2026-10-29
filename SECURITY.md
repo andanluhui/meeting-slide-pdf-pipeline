@@ -23,3 +23,10 @@
 - Start only from a real media request observed while the user played an authorized video. Do not guess video file suffixes, generate unlisted session IDs, or scan a website for private videos.
 - Require explicit approval of the video host and a user-provided list of sessions that the user is authorized to access. If credentials are bound to individual sessions, a 401/403 response stops the batch; user must log in again or capture requests normally.
 - Treat HAR, private session lists, signed URLs, cookies and browser profiles as sensitive local files. Do not commit or share them.
+
+## Separate browser authorization (all website sources)
+
+- A website login belongs to the browser/session in which it happened. Neither an AI agent nor this Skill silently inherits the user's existing Chrome/Edge login or a cloud browser's session.
+- The user must explicitly authorize the browser and execution environment that will capture or download media. When using the Playwright browser mode, sign in inside its new browser window.
+- Never request, paste, or transmit account passwords, MFA codes, cookies or JWTs through a public chat. HAR/network exports can contain live credentials; limit their use to a trusted local runtime and never attach them to the README or a public issue.
+- Confirm website permissions and the intended session list before batch downloads; separately confirm any upload to Feishu or another cloud provider.

@@ -2,9 +2,19 @@
 
 This module handles **authorized** video requests already visible to the user in a logged-in browser. It is not a scraper that bypasses authentication or DRM. **Do not share HAR exports or browser profiles.** The existing PDF engine is not changed.
 
+## Who must sign in? The user and the agent have different browser sessions
+
+**Do not treat "the user already signed in" as "the agent can access the site."** A normal Chrome/Edge session on the user's computer is separate from an agent's cloud browser, an AI desktop browser, and the Playwright profile that this Skill starts. They do not automatically share their cookies or permission state.
+
+1. **Agent browser available:** let the agent navigate to the website and ask the user to complete normal login/verification inside the agent-controlled browser. Confirm the actual media request is accessible in that browser. Do not ask for passwords or authentication tokens in chat.
+2. **This Skill's local browser mode:** `authenticated_video.py browser` launches a separate local Playwright profile. The user must log in in **that specific window**; even an already-authorized AI cloud browser cannot automatically authorize the local Playwright downloader.
+3. **Browser access not available:** ask for an authorized local video file. A local HAR exported from the user's own logged-in browser can be used by a **trusted local** runtime, but it may contain cookies or signed URLs. Never upload it to chat, the repository, or a third-party file service. Do not imply an agent can read it unless it really has local filesystem access.
+
+A signed-in session is not necessarily permission to download recordings. The tool processes only media the user has authority to access and retrieve, and the downloader must actually possess that authority in its own execution environment. Ask for explicit session lists and confirmation before bulk downloads. Uploading finished PDFs is a separate action requiring its own authorization.
+
 ## Route A: browser DevTools HAR export (closest to a manual EADV workflow)
 
-1. Open the official video website in your own browser and sign in normally.
+1. In your own browser, open the website and sign in normally. This authorizes ONLY that browser; the exported HAR must subsequently be read in an approved private local environment.
 2. Open Developer Tools -> Network; enable *Preserve log* and start actual video playback. Repeat across the authorized video pages to be captured. Ensure the media resource itself is visible in Network (often `video.mp4`).
 3. Export the captured network requests to a local HAR file. **HARs can include signed links, Cookie and Authorization tokens**: treat the file like a password; never send it to colleagues or upload it to a repo.
 4. Inspect available media hosts *without downloading*:
@@ -31,7 +41,7 @@ python -m pip install -r scripts/requirements-browser.txt
 python -m playwright install chromium
 ```
 
-Start a separate browser profile and log in through the normal website UI:
+Start a separate browser profile. The user must log in directly in the window launched by this command, not in an unrelated Chrome/Edge or cloud-agent session:
 
 ```bash
 python scripts/authenticated_video.py browser --url "https://portal.example.org/videos" \
