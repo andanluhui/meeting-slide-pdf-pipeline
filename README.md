@@ -1,33 +1,97 @@
-# 会议录播转幻灯片 PDF（meeting-slide-pdf-pipeline）
+# meeting-slide-pdf-pipeline v1.1 — Video to Slides PDF
 
-本 Skill 用于将一场或多场学术会议录播视频按演讲拆分为独立幻灯片 PDF，依据日程表归属对应讲者，并将 PDF 上传云文档、回填表格。支持分步重跑、幂等回填、自检、磁盘清理和静默巡检。
+把**本地视频或直接视频 URL** 提取为幻灯片 PDF，自动去重、保守去黑边、生成缩略图核查页。默认无需会议议程、飞书、JWT 或云端账号。需要时还可手动按章节拆分 PDF、上传至飞书，或使用原有会议批处理/议程自动归属与表格回填功能。
 
-## 文件结构
+> **当前状态：v1.1 通用基础版。** 自动识别使用启发式算法，演讲者小窗、动态背景、渐变和一秒内闪过的页面可能造成误检或漏检；重要资料必须检查缩略图总览。当前没有提供任何视频网页的登录/DRM 绕过功能。
 
-- `SKILL.md`：操作流程、约束和脚本索引
-- `scripts/`：视频下载、抽帧、切段、归属、生成 PDF、飞书回填、自检与清理的脚本
-- `references/`：工作流、运行经验、飞书命令说明
-- `runner/`：Windows 可选安装器和一键运行器
-- `agents/`、`assets/`：Skill 元数据与图标
+## 最快使用方式（无需飞书）
 
-## 首次使用
+需要 **Python 3.10+**。克隆/下载本仓库，在仓库根目录打开命令行：
 
-1. 下载本仓库并将 `meeting-slide-pdf-pipeline` 目录放入你的 Skills 目录。
-2. 将 `scripts/config.example.json` 复制到**本地工作区根目录**并重命名为 `config.json`。
-3. 在本地 `config.json` 中填写 `base`、`lark_cli`、`spreadsheet`、`sheets`、`folder_token`、`file_url_prefix`、`video_url_tpl` 等字段。
-4. 将会议视频访问凭证通过环境变量 `MSP_JWT` 或本地 `jwt_file` 提供，**不要把真实 JWT 写进 Git 仓库**。
-5. 参考 `SKILL.md` 快速开始，以单场采样和 `fillsync.py --dry` 先确认效果。
+```bash
+python -m pip install -r scripts/requirements-core.txt
+python scripts/video_to_pdf.py "/path/to/lecture.mp4"
+```
 
-依赖见 `scripts/requirements.txt`；可运行 `python scripts/pybootstrap.py --check` 诊断解释器。
+Windows 示例：
+
+```powershell
+py -m pip install -r scripts/requirements-core.txt
+py scripts/video_to_pdf.py "D:\\Videos\\lecture.mp4" --output "D:\\Videos\\lecture-slides.pdf"
+```
+
+可访问的直接视频 URL：
+
+```bash
+python scripts/video_to_pdf.py "https://example.org/lecture.mp4" --output "./lecture.pdf"
+```
+
+**直接链接**指访问后返回实际视频字节的 HTTP(S) URL，并非一个含播放器的网页。若需要登录、访问受保护资源或播放流媒体，先在有授权的环境中取得本地视频，或后续安装来源适配器。
+
+### 输出结果
+
+| 产物 | 作用 |
+|---|---|
+| `lecture-slides.pdf` | 按时间顺序保留的候选幻灯片 |
+| `lecture-slides-contact.jpg` | 缩略图总览，检查漏页、重复页或摄像头画面 |
+| `lecture-slides.json` | 输入来源类型、帧数、页数、页起始时间、裁剪范围、章节结果 |
+
+结果默认写入**运行命令时的当前文件夹**，不会修改或删除原始视频。临时解码帧在正常运行结束或失败时清理；`--keep-work` 可以保留以便排错。已有输出默认不覆盖，须明确指定 `--overwrite`。
+
+## 复杂布局和章节
+
+录播中讲者占右侧、幻灯片在左侧时，可指定幻灯片区域（x,y,width,height），四个 0–1 数值为画面比例：
+
+```bash
+python scripts/video_to_pdf.py "./lecture.mp4" --crop 0,0,0.78,1 --fps 2
+```
+
+不指定 `--crop` 时只会保守识别黑边，不会自动识别所有画中画、侧栏或动态布局；请检查输出的缩略图总览，并在必要时用 `--crop` 重跑。适当提高 `--fps` 能改善短暂页面采样，但会增加计算量。
+
+按已知时间点拆分章节（不需要云端议程表）：
+
+```bash
+python scripts/video_to_pdf.py "./conference.mp4" --chapters examples/chapters.example.json
+```
+
+`examples/chapters.example.json` 是通用示例，可复制修改。每项包含 `start`（从视频开始算起的秒）与 `title`。生成总 PDF 之外，还生成 `*-slides-chapters/` 目录中的单章节 PDF；没有有效页面的章节会在报告中标记为 `empty`。
+
+## 可选：把 PDF 上传飞书，不回填表格
+
+默认完全在本地运行。只有明确需要分享或归档时再上传。需要单独安装并登录 `lark-cli`，然后在**本机环境变量**（不要放进 Git 仓库）中设置 `LARK_FOLDER_TOKEN` 和 `LARK_FILE_URL_PREFIX`（例如 `https://your-tenant.feishu.cn/file/`）。
+
+```bash
+python scripts/upload_pdf.py "./lecture-slides.pdf" --dry-run
+python scripts/upload_pdf.py "./lecture-slides.pdf"
+```
+
+可用 `--lark-cli` 指定工具的绝对路径；同内容、同目的文件夹默认复用上传记录。链接缓存 `.pdf_uploads.json` 放在本机，不包含在仓库。上传脚本**不修改表格**。
+
+## 已有会议批处理与回填（保留旧功能）
+
+需要依据议程匹配讲者、自动切段、批量上传和飞书表格回填时，沿用旧的专用流程。先安装完整依赖，再准备工作区 `config.json` 和已授权的飞书工具，见 [旧版完整指南](references/legacy-skill-guide.md)。
+
+```bash
+python -m pip install -r scripts/requirements.txt
+python scripts/pipeline.py --all
+python scripts/build_final.py
+python scripts/fillsync.py --dry
+```
+
+旧流程默认对特定会议版式要求较高；不要把它当成通用入口。
+
+## 测试与兼容性
+
+当前通用入口使用 Python 3.10+、PyMuPDF、Pillow、NumPy、Requests 与 FFmpeg（`imageio-ffmpeg` 自带）。适用于 Windows/macOS/Linux 的常规 Python 运行环境；实际目标机器仍需检查依赖和可访问视频的权限。
+
+```bash
+python -m unittest discover -s tests -v
+python scripts/video_to_pdf.py --help
+python scripts/upload_pdf.py --help
+```
+
+测试覆盖本地视频、HTTP 直链、黑边、浅色/深色背景、章节拆分、拒绝覆盖已有文件、上传 dry-run。完整真实会议视频、不同播放器网站和真实飞书上传仍需在有访问权限的实际环境中验证。
 
 ## 安全与隐私
 
-仓库中的域名、文件夹标识和表格 ID 均为通用示例，并不提供任何真实会议视频或飞书内容的访问权限。真实视频链接、会议数据、工作区配置、JWT、日志和生成的 PDF 应留在本地或适当授权的环境中。
-
-`.gitignore` 已排除常见的密钥、运行数据和自动生成的本机启动器，但它**不能替代提交前的安全检查**。例如，使用 `git add -A` 后应执行 `git diff --cached --name-only` 并逐项核实。
-
-`runner/launch-msp-run.bat` 是 `runner/install.ps1` 在本机自动生成的文件，故不包含在仓库中。
-
-## 更新说明
-
-本公开分发准备版去除了特定用户的本地绝对路径、实际飞书租户域名、工作表 ID 和会议视频 CDN 路径，并将默认配置改为占位符。处理逻辑未改变；重新部署时须填写各自工作环境的配置。
+读取 [SECURITY.md](SECURITY.md)。`config.json`、JWT、飞书工作表 ID、个人路径、源视频及输出成果均应存放在私有工作区，不提交至 GitHub。公开发布需额外确认代码产权及视频/会议内容的分享授权。

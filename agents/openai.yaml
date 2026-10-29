@@ -1,7 +1,6 @@
 interface:
-  display_name: meeting slide pdf pipeline
-  short_description: 把学术会议录播视频按单场演讲切成幻灯片 PDF，上传云文档并把链接回填到飞书表格对应行。适用于「会议视频抽帧生成讲者幻灯片」「会议回放整理成
-    PDF 归档」「把演讲 PDF 链接批量回填到日程表」「会议视频批处理流水线」等请求。内置中间产物清理、定期自检与静默后台守护三项附加能力。
+  display_name: Video to Slides PDF
+  short_description: 将本地视频或授权的在线视频直链抽帧、去重，生成幻灯片 PDF 与缩略图。可选章节拆分、飞书上传，以及旧版会议批量回填。
   icon_small: assets/icon.svg
   icon_large: assets/icon.svg
 policy:

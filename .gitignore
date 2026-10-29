@@ -52,3 +52,10 @@ __pycache__/
 .mypy_cache/
 .DS_Store
 Thumbs.db
+
+# Generic mode local PDF upload cache / intermediate outputs
+.pdf_uploads.json
+*.incomplete
+slide-work-*/
+*-slides.json
+*-contact.jpg

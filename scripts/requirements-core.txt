@@ -1,0 +1,6 @@
+# Lightweight, platform-independent generic video -> slide PDF entrance
+numpy>=1.24
+pymupdf>=1.24
+pillow>=10.0
+requests>=2.31
+imageio-ffmpeg>=0.4

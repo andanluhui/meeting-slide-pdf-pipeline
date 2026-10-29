@@ -1,131 +1,75 @@
 ---
 name: meeting-slide-pdf-pipeline
-description: 把学术会议录播视频按单场演讲切成幻灯片 PDF，上传云文档并把链接回填到飞书表格对应行。适用于「会议视频抽帧生成讲者幻灯片」「会议回放整理成 PDF 归档」「把演讲 PDF 链接批量回填到日程表」「会议视频批处理流水线」等请求。内置中间产物清理、定期自检与静默后台守护三项附加能力。
+description: 从本地视频文件或可访问的 HTTP(S) 视频直链提取幻灯片/关键画面，智能去重、去黑边并生成 PDF 与核查缩略图；可根据章节时间点拆分多个 PDF。可选把 PDF 上传飞书，或沿用基于会议议程表的自动分段及回填流程。适用于视频转幻灯片 PDF、录屏课件整理、讲座抽帧、会议视频切片、PDF 归档和云文档上传等请求；若无上传授权，默认只处理本地文件。
 ---
 
-# 会议录播 → 单场演讲幻灯片 PDF → 表格回填
+# Video / lecture → slide PDF (v1.1)
 
-## 目的
+## 默认使用：通用、离线优先
 
-把一场会议录播（可能连续包含十几场演讲）自动切成按演讲归类的幻灯片 PDF，
-上传云文档后把链接写回表格中该演讲所在的行，并保证：内容完整不漏页、
-归属不错行、重复运行不产生重复劳动。
-
-## 何时使用
-
-- 用户给出会议视频（平台直链 / CDN / 本地文件）+ 日程表，要求按演讲出 PDF
-- 要求「把 PDF 链接填回表格对应行」「按演讲主题 + 讲者命名」
-- 需要排除黑屏、投票互动页、主席过渡、纯问答片段
-- 这类流水线跑起来之后的运维需求：清理已下载视频、定期自检进度与质量
-
-## 快速开始
-
-1. 复制 `scripts/config.example.json` 到工作区根目录 `config.json`，
-   填写 `base` / `lark_cli` / `spreadsheet` / `sheets` / `folder_token` / `jwt`。
-   大体积中间产物目录 `tmp_root` 必须指向空闲盘，不要放系统盘。
-2. 建立底账：`python scripts/make_tasks.py --sheet <子表> --kw <关键词>`，
-   然后补齐每场的 `manage_id`（视频 ID）。
-3. 先跑一场采样：`python scripts/pipeline.py <场次key>`，
-   看 `analysis_sheet.png` 与段 PDF，确认版式坐标与切页密度合适。
-4. 批量：`python scripts/pipeline.py --all`
-5. 合并成品：`python scripts/build_final.py`
-6. 回填：`python scripts/fillsync.py --dry` 先看计划，再去掉 `--dry` 执行
-7. 验收：`python scripts/selftest.py`，再抽样打开几份成品
-
-**每个环节都能单独跑**（契约与组合示例见 `references/standalone.md`）：
-download / frames / segment / assign 四步用 `--steps` 指定，
-`build_final`、`fillsync` 可细到 `--sheet` / `--session` / `--rows`，
-`selftest` 可只跑 `--section disk|progress|assign|reconcile`。
-改一处逻辑只重跑一处，不要全量重来。
-
-**解释器不用管**：`pipeline.py` / `build_final.py` 启动时会**自动切换到装了依赖的解释器**
-（`pybootstrap.py`），所以直接 `python scripts/pipeline.py --all` 就行。
-裸 python、系统 python、别的 agent 宿主自带的 python 都能起得来 —— 缺依赖时它自己换，
-全都找不到就打印一行 `pip install` 命令并给出退出码 3（**不再是 ImportError 回溯**）。
+**当用户只给出本地视频文件或可访问的 HTTP(S) 视频直链、要求提取 PPT/幻灯片并生成 PDF 时，优先使用 `scripts/video_to_pdf.py`。**
+不要求飞书表格、JWT、会议 `manage_id`、议程表或固定的直播画面尺寸。
+不要为了执行通用任务而运行旧版 `pipeline.py --all`，也不要自行调用上传脚本。
 
 ```bash
-python scripts/pybootstrap.py --check        # 诊断：当前解释器 / 缺什么 / 建议用哪个
-set MPDF_PY=<python.exe 完整路径>             # 强制指定解释器
-python -m venv .venv && .venv\Scripts\pip install -r scripts/requirements.txt   # 全新环境
+# 安装一次通用依赖（Python 3.10+）
+python -m pip install -r scripts/requirements-core.txt
+
+# 本地视频 -> 本地 PDF（缺省写到当前目录，默认不覆盖）
+python scripts/video_to_pdf.py "./lecture.mp4"
+
+# 用户授权的直接视频 URL（不是播放器网页）
+python scripts/video_to_pdf.py "https://example.org/lecture.mp4" --output "./lecture.pdf"
+
+# 录播画面包含讲者小窗时，按需手工裁剪到幻灯片区域：x,y,width,height，0-1 的比例值
+python scripts/video_to_pdf.py "./conference.mp4" --crop 0,0,0.78,1 --output "./slides.pdf"
+
+# 用户明确给出章节起始时间时，额外生成分章节 PDF
+python scripts/video_to_pdf.py "./conference.mp4" --chapters examples/chapters.example.json
 ```
 
-> 依赖清单固定在 `scripts/requirements.txt`（numpy / pymupdf / pillow / requests /
-> imageio-ffmpeg / rapidocr-onnxruntime）。**不要再往文档里写死解释器绝对路径** ——
-> 换机器或换 agent 宿主目录结构就不同，写死必然失效。
+输出：`*-slides.pdf`、`*-slides-contact.jpg`（缩略图总览）、`*-slides.json`（页数、起始时间、画面裁剪信息）。
+若使用 `--chapters`，额外生成 `*-slides-chapters/` 目录。通用模式不读取或写入飞书。
+默认只清理自己临时生成的解码帧，绝不删除源视频，`--keep-work` 可保留中间产物。
+输出存在时中止；只有用户明确要求替换才允许 `--overwrite`。
 
-## 硬约束（违反会付出真实代价）
+### 通用模式边界
 
-1. **目标列一律按第 1 行表头名定位**（`colmap.pdf_col()`），
-   绝不硬编码 `U`/`N`/`Q` 等列字母 —— 用户增删列后字母会整体漂移。
-2. **写入必须幂等**：写入前用 `cell_value()` 精确读单元格，已有同名链接就跳过；
-   同一份 PDF 按文件签名复用已上传 URL，绝不重复上传。
-3. **覆盖前先出清单**：目标单元格有用户手工内容或合并单元格时，只报告不动手。
-4. **抽帧用 `fps=1`**，不用关键帧模式；页去重的基准 mask 不累积；
-   不丢弃单页段（只有单页且持续 > 5 分钟才判为讨论 / 待机）。
-5. **成品无条件重建**，不要「已存在就跳过」；归属逻辑改动先用 `--rematch` 验证。
-6. **大文件落空闲盘，系统盘空闲守住 13 GB 以上**（低空间会触发系统反复弹窗）。
-7. **巡检走后台**：用计划任务 + `pythonw` 跑 `monitor_silent.py`，
-   不要在会话里反复轮询进度与磁盘。
-8. **清理绝不重试**：删除被安全策略拦截时立即熔断并停止（`diskguard`），
-   「被拦 → 重试 → 再被拦」正是历史上不停弹窗的成因。
-   所有脚本都不调用 `schtasks` / `reg` / `sc` / `wmic` / `wsl` 等会弹授权框的命令。
+- 只接受本地视频与**用户有权限访问的直接视频文件 URL**。播放器网页、DRM、需登录下载的来源不能保证直接使用，也不应绕过认证或访问控制。
+- 抽帧缺省 1 fps，启发式识别“背景相同但内容替换”与渐显；**不是无漏页保证**。用缩略图总览核查，复杂布局/讲者小窗可指定 `--crop`；用户要求高完整性时提高 `--fps` 并人工复核。
+- `--crop` 省略时仅保守识别持续黑边；不会自动准确识别复杂画中画幻灯片边框。任意视频（比如纯人物采访）不是幻灯片视频，可能产生较多候选页。
+- `--chapters` 需用户提供 JSON 时间点；通用模式不凭空识别讲者身份，也不自动猜测议程。
+- 处理视频和上传 PDF 是不同授权：若用户只要求生成 PDF，不要把源视频或 PDF 传到第三方服务。
 
-完整流程、判据阈值与命令细节见 `references/workflow.md`；
-全部踩坑与成因见 `references/pitfalls.md`（改动脚本前必读）；
-飞书读写命令见 `references/feishu.md`。
+## 仅在用户明确要求上传时：独立飞书上传
 
-## 附加技能（均可独立运行）
+通用模式可以先输出 PDF，再选择性上传到飞书云空间；不需要表格和议程：
 
-| 能力 | 命令 | 说明 |
-|---|---|---|
-| 磁盘守卫 | `diskguard.py` / `--need-gb N` / `--unblock` | 只读检测、落盘前配额判定、清理熔断标志 |
-| 中间产物清理 | `cleanup.py --scan` / `--plan` / `--do --limit 500` | 只清可再生的抽帧目录与已下载视频；默认只出清单 |
-| 低空间自动清理 | `cleanup.py --auto` | 低于 `min_free_gb` 才执行，且过熔断 + 节流两道闸 |
-| 被取代的旧段 PDF | `cleanup.py --superseded --do` | 已合并进成品的段 PDF |
-| 只清视频 | `cleanup.py --videos --do` | 最占空间的一项 |
-| 定期自检 | `selftest.py [--section disk/progress/assign/reconcile]` | 只读；支持只跑单项 |
-| 静默守护 | `monitor_silent.py [--foreground]` | 配计划任务每 30 分钟；写日志、停滞告警、低空间自动清理 |
+```bash
+python scripts/upload_pdf.py "./lecture-slides.pdf" --dry-run
+# 需要事先安装并登录 lark-cli，配置 LARK_FOLDER_TOKEN / LARK_FILE_URL_PREFIX
+python scripts/upload_pdf.py "./lecture-slides.pdf"
+```
 
-**弹窗治理（用户明确要求过「巡检别打扰我」）**：弹窗有三个真实来源，
-都已在本 skill 里堵死 ——
-① Windows 低磁盘告警 → 靠**下载前配额检查**预防，不靠事后清理；
-② 批量删除保护 → 靠**熔断**（连续失败即停、写 flag，此后一律不重试）；
-③ 提权授权框 → 全程不调用 `schtasks` / `reg` / `sc` / `wmic` / `wsl`。
-详见 `references/pitfalls.md` 的「弹窗专项」。
+该脚本用内容 SHA-256 对同一文件+目标文件夹做幂等上传记录，链接在本地 `.pdf_uploads.json` 中缓存，不写表格；`--force` 才重新上传。
+不得把飞书 Token、私有视频链接、上传日志、会议文件提交到 GitHub。
 
-安全边界：清理永不触碰 `pdf/` 与 `pdf_final/`（交付物），
-永不删除未完成场次的中间产物，删除用逐文件方式，且被拦即停。
+## 原有高级功能：会议议程匹配 + 批处理 + 自动回填
 
-## 脚本索引
+原来的 `pipeline.py` / `make_tasks.py` / `build_final.py` / `fillsync.py` / `selftest.py` / `cleanup.py` / `monitor_silent.py` 均保留。
+**只有在用户明确要求“按讲者或议程归属、批量处理、上传并回填表格”时才启用。**
+旧版完整步骤和硬约束见 [references/legacy-skill-guide.md](references/legacy-skill-guide.md)，分步契约见 [references/standalone.md](references/standalone.md)，踩坑见 [references/pitfalls.md](references/pitfalls.md)。
 
-| 脚本 | 独立运行入口 |
-|---|---|
-| `pybootstrap.py` | 解释器自举与诊断：`--check` / `--show` / `--exec`；被 pipeline / build_final 自动调用 |
-| `config.py` | 配置加载（工作区 config.json / 环境变量），被所有脚本复用 |
-| `fastdl.py` | 多连接分片下载（CDN 支持 Range 时 8 并发 0.58→3 MB/s）；被 download 自动调用，可单跑 |
-| `make_tasks.py` | `--sheet <子表> --kw <关键词>` 生成 tasks.json 底账骨架 |
-| `pipeline.py` | `--steps download,frames,segment,assign`；`<key>` 单场，`--all` 批量，`--rematch` 只重算归属 |
-| `build_final.py` | `[子表]` / `--session <key>` / `--rows a,b` |
-| `fillsync.py` | `--dry` / `--sheet` / `--rows` / `--fill-only` |
-| `diskguard.py` | 磁盘守卫（附加技能⓪）：状态、配额判定、熔断 |
-| `cleanup.py` | 中间产物清理（附加技能①）：`--scan/--plan/--do/--auto/--videos/--superseded` |
-| `selftest.py` | 只读自检（附加技能②）：`--section` 只跑单项 |
-| `monitor_silent.py` | 静默后台守护（附加技能③）：计划任务 + pythonw |
-| `colmap.py` | 按表头名定位列 + 单元格读写（所有写表操作都走它） |
+其中必须遵守：按照第一行**表头**定位 PDF 列；写入前精确检查单元格；已有人工内容不覆盖；重复 PDF 不重复上传；先执行 `fillsync.py --dry`；清理仅限可再生中间产物，禁止清理成品。该模式需本地私密 `config.json` 和已授权的飞书环境。
 
-## 归属存疑时的复核捷径
+## 调试、验收与分享
 
-段 PDF 的文件名里带讲者署名，是比 OCR 标题更可靠的证据。
-出现「某行页数畸高、后面几行 0 段」时，按署名把段拆回对应行即可，
-详见 `references/pitfalls.md` 第 12 条。
+```bash
+python -m unittest discover -s tests -v
+python scripts/video_to_pdf.py --help
+python scripts/upload_pdf.py --help
+```
 
-## 可选：一键运行器 `runner/`
-
-`runner/` 是**非必需**的自动化包装，删掉不影响本 skill 任何功能：
-
-- `runner/run.ps1`：一条命令跑完 抽帧→切段→归属→成品→自检→回填计划，终端只回摘要，
-  完整日志落 `<base>\_work\runner-*.log`，失败才回尾部日志（跑流水线时几乎不消耗模型 token）。
-- `runner/install.ps1`：一键装进 DSH / WorkBuddy 的 skill 目录，并可创建 DSH 低思考档
-  profile `msp-run`（skill 的 frontmatter 没有 model/effort 字段，档位只能在 profile 层设置）。
-
-用法与卸载见 `runner/README.md`。
+- 使用细节与跨平台安装：`README.md`；安全要求：`SECURITY.md`。
+- 复杂布局下执行结果不能仅凭自动页数认定完整，需查看联系表 `*-contact.jpg`。
+- 不要将实际视频、表格、密钥、输出 PDF 或本机启动器打包进 Skill。
