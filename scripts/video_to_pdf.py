@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Generic, local-first video -> deduplicated slide PDF (no Feishu or agenda).
+"""Generic, local-first video -> deduplicated slide PDF with QA (v1.2) (no Feishu or agenda).
 
 Examples:
   python scripts/video_to_pdf.py ./lecture.mp4
@@ -26,6 +26,9 @@ import tempfile
 from urllib.parse import unquote, urlsplit
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from layout_analysis import inspect_layout, save_layout_preview
+from quality_review import audit, suggest_chapters
 
 
 def clean_title(title: str, limit: int = 85) -> str:
@@ -98,7 +101,7 @@ def get_video(source: str, work: Path, max_download_gb: float) -> Path:
     try:
         response_handle = requests.get(source, stream=True, allow_redirects=True,
                       headers={'Accept': 'video/*,application/octet-stream;q=0.9,*/*;q=0.5',
-                               'User-Agent': 'meeting-slide-pdf-pipeline/1.1'},
+                               'User-Agent': 'meeting-slide-pdf-pipeline/1.2'},
                       timeout=(20, 120))
     except requests.RequestException as exc:
         raise RuntimeError('Video download failed before receiving a response') from exc
@@ -162,6 +165,63 @@ def extract_frames(video: Path, work: Path, fps: float, max_frames: int):
     if not frames:
         raise ValueError('No video frames could be decoded')
     return [(n / fps, p) for n, p in enumerate(frames)]
+
+
+
+def extract_scene_frames(video: Path, work: Path, *, scene_threshold: float, max_extra: int):
+    """Decode scene cuts independently of fixed FPS to rescue short-lived slides.
+
+    ffmpeg's `scene` metric is imperfect, especially for small text-only edits.
+    Return (time, path) frames, never claiming guaranteed completeness.
+    """
+    if not (0.03 <= scene_threshold <= 0.7):
+        raise ValueError('--scene-threshold must be between 0.03 and 0.7')
+    if max_extra < 1:
+        return [], {'status': 'disabled', 'count': 0}
+    folder = work / 'scene_frames'
+    folder.mkdir(parents=True, exist_ok=True)
+    pattern = str(folder / 'scene_%06d.jpg')
+    # ffmpeg scene detection operates on the decoded original-rate video.
+    # showinfo emits pts_time for every selected output frame.
+    vf = "select='gt(scene,%.4f)',showinfo" % scene_threshold
+    cmd = [ffmpeg_executable(), '-nostdin', '-hide_banner', '-loglevel', 'info',
+           '-i', str(video), '-map', '0:v:0', '-an', '-vf', vf,
+           '-vsync', 'vfr', '-q:v', '3', '-frames:v', str(max_extra+1),
+           '-start_number', '0', '-y', pattern]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=8*3600)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError('Scene transition scan exceeded time limit') from exc
+    if proc.returncode:
+        raise RuntimeError('Scene-boost FFmpeg pass failed: ' +
+                           proc.stderr.decode('utf-8',errors='replace')[-350:])
+    paths = sorted(folder.glob('scene_*.jpg'))
+    if len(paths) > max_extra:
+        raise ValueError('Too many scene transitions; rerun with --no-scene-boost or increase --max-frames.')
+    logs = proc.stderr.decode('utf-8',errors='replace')
+    times = [float(m.group(1)) for line in logs.splitlines()
+             if '[Parsed_showinfo_' in line and 'pts_time:' in line
+             for m in [re.search(r'pts_time:\s*([-+0-9.eE]+)', line)] if m]
+    if len(times) != len(paths):
+        return [], {'status': 'timestamps_unavailable', 'count': 0,
+                    'note': 'Scene timestamps could not be read; scene frames omitted for safety.'}
+    return list(zip(times, paths)), {'status':'ok', 'count':len(paths)}
+
+
+def merge_samples(samples, extras, max_frames):
+    """Use an extra frame only when it is not already sampled at that moment."""
+    ordered = sorted(samples + extras, key=lambda x: x[0])
+    merged = []
+    for t, p in ordered:
+        if merged and abs(t-merged[-1][0]) < 0.075:
+            # Prefer fixed-rate sample if timestamps collide. Either carries the page.
+            if 'scene_' not in p.name:
+                merged[-1] = (t,p)
+        else:
+            merged.append((t,p))
+    if len(merged) > max_frames:
+        raise ValueError('Combined sampling exceeds --max-frames; use lower --fps or --no-scene-boost.')
+    return merged
 
 
 def parse_crop(value: str | None, width: int, height: int):
@@ -269,17 +329,18 @@ def choose_pages(frames, crop, dedup_threshold):
         if is_blank(*s):
             continue
         if current is None:
-            current = {'start_sec': round(t, 2), 'last_sec': round(t, 2),
-                       'frame': str(frame)}
+            current = {'start_sec': round(t, 3), 'last_sec': round(t, 3),
+                       'frame': str(frame), 'sample_count': 1}
             current_sig = s
         elif is_new_page(current_sig, s, dedup_threshold):
             pages.append(current)
-            current = {'start_sec': round(t, 2), 'last_sec': round(t, 2),
-                       'frame': str(frame)}
+            current = {'start_sec': round(t, 3), 'last_sec': round(t, 3),
+                       'frame': str(frame), 'sample_count': 1}
             current_sig = s
         else:
-            current['last_sec'] = round(t, 2)
+            current['last_sec'] = round(t, 3)
             current['frame'] = str(frame)
+            current['sample_count'] += 1
             # Replace reference with latest (never OR masks together). This keeps
             # the finished reveal available for detecting subsequent replacement.
             current_sig = s
@@ -350,23 +411,35 @@ def build_chapters(pages, chapters, crop, output: Path, overwrite: bool):
     return results
 
 
-def save_contact_sheet(pages, crop, dst: Path, overwrite: bool):
+def save_contact_sheets(pages, crop, dst: Path, overwrite: bool, batch_size=120):
+    """Save EVERY thumbnail; a long lecture must not silently truncate QA."""
     from PIL import Image, ImageDraw
-    if dst.exists() and not overwrite:
-        raise FileExistsError('Contact sheet exists. Use --overwrite: %s' % dst)
-    show = pages[:120]
-    width, height, cols, label = 210, 130, 4, 22
-    rows = (len(show) + cols - 1) // cols
-    sheet = Image.new('RGB', (cols*width, rows*(height+label)), 'white')
-    drawer = ImageDraw.Draw(sheet)
-    for i, p in enumerate(show):
-        x, y = (i % cols)*width, (i // cols)*(height+label)
-        with Image.open(p['frame']) as src:
-            img = src.convert('RGB').crop(crop)
-        img.thumbnail((width-8, height-8))
-        sheet.paste(img, (x + (width-img.width)//2, y + (height-img.height)//2))
-        drawer.text((x+5, y+height), '%d  %.1fs' % (i+1, p['start_sec']), fill='black')
-    sheet.save(dst, quality=88)
+    files = []
+    for offset in range(0, len(pages), batch_size):
+        number = offset//batch_size
+        path = dst if number == 0 else dst.with_name(dst.stem+'-%03d'% (number+1)+dst.suffix)
+        if path.exists() and not overwrite:
+            raise FileExistsError('Contact sheet exists. Use --overwrite: %s' % path)
+        show = pages[offset:offset+batch_size]
+        width, height, cols, label = 210, 130, 4, 22
+        rows = (len(show) + cols - 1)//cols
+        sheet = Image.new('RGB', (cols*width, rows*(height+label)), 'white')
+        drawer = ImageDraw.Draw(sheet)
+        for i,p in enumerate(show):
+            x,y=(i%cols)*width,(i//cols)*(height+label)
+            with Image.open(p['frame']) as src:
+                img = src.convert('RGB').crop(crop)
+            img.thumbnail((width-8,height-8))
+            sheet.paste(img,(x+(width-img.width)//2,y+(height-img.height)//2))
+            drawer.text((x+5,y+height),'%d  %.2fs'%(offset+i+1,p['start_sec']),fill='black')
+        sheet.save(path,quality=88)
+        files.append(path)
+    return files
+
+
+def save_contact_sheet(pages, crop, dst: Path, overwrite: bool):
+    """Backward compatible wrapper; new code uses save_contact_sheets."""
+    return save_contact_sheets(pages,crop,dst,overwrite)[0]
 
 
 def preflight(outputs, overwrite: bool):
@@ -384,41 +457,78 @@ def run(args):
     output.parent.mkdir(parents=True, exist_ok=True)
     report_path = output.with_suffix('.json')
     contact_path = output.with_name(output.stem + '-contact.jpg')
+    layout_path = output.with_name(output.stem + '-layout.jpg')
     chapters = read_chapters(args.chapters) if args.chapters else []
-    preflight([output, report_path, contact_path], args.overwrite)
+    if args.auto_chapters and args.chapters:
+        raise ValueError('--auto-chapters and --chapters are mutually exclusive')
+    preflight([output,report_path,contact_path,layout_path],args.overwrite)
     if chapters and not args.overwrite:
         preflight([output.parent / (output.stem+'-chapters') /
-                   ('%02d_%s.pdf' % (i+1, c['title'])) for i,c in enumerate(chapters)], False)
-    check_disk(output.parent, args.min_free_gb)
-    with temporary_workspace(output.parent, args.keep_work) as work:
-        video = get_video(args.source, work, args.max_download_gb)
+                   ('%02d_%s.pdf' % (i+1,c['title'])) for i,c in enumerate(chapters)],False)
+    check_disk(output.parent,args.min_free_gb)
+    with temporary_workspace(output.parent,args.keep_work) as work:
+        video = get_video(args.source,work,args.max_download_gb)
         print('Input accepted (%s); decoding frames...' % source_kind(args.source))
-        frames = extract_frames(video, work, args.fps, args.max_frames)
+        fixed = extract_frames(video,work,args.fps,args.max_frames)
+        bonus,scene = ([], {'status':'disabled','count':0})
+        if args.scene_boost:
+            bonus,scene = extract_scene_frames(video,work,scene_threshold=args.scene_threshold,
+                                               max_extra=max(0,min(args.max_scene_frames,args.max_frames-len(fixed))))
+        frames = merge_samples(fixed,bonus,args.max_frames)
         from PIL import Image
         with Image.open(frames[0][1]) as im:
-            w, h = im.size
-        crop = parse_crop(args.crop, w, h) if args.crop else auto_crop(frames)
-        pages = choose_pages(frames, crop, args.dedup_threshold)
+            w,h = im.size
+        blackbars = auto_crop(frames)
+        if args.crop:
+            crop = parse_crop(args.crop,w,h)
+            layout = {'mode':'manual','strategy':'user_selected','confidence':'user_selected',
+                      'crop_xyxy':list(crop),'candidates':[],'notes':[]}
+        else:
+            baseline = (0,0,w,h) if args.layout=='full' else blackbars
+            crop,layout = inspect_layout(frames,baseline,args.layout)
+        pages = choose_pages(frames,crop,args.dedup_threshold)
         if not pages:
             raise ValueError('No non-blank slide-like frames found')
-        print('Sampled %d frames; retained %d candidate pages; crop=%s' %
-              (len(frames), len(pages), crop))
-        save_pdf(pages, crop, output, overwrite=args.overwrite)
-        save_contact_sheet(pages, crop, contact_path, overwrite=args.overwrite)
-        chapter_results = build_chapters(pages, chapters, crop, output, args.overwrite) if chapters else []
-        report = {'version': '1.1', 'input_type': source_kind(args.source),
-                  'input_name': Path(urlsplit(args.source).path).name if source_kind(args.source) == 'url'
+        # Estimate end from the last sample rather than pretending to know the
+        # exact video duration (short scenes may end before the next sample).
+        duration_hint = frames[-1][0] + 1/max(0.1,args.fps)
+        qa = audit(pages,frames,crop,layout,args.fps,scene['count'],duration_hint=duration_hint)
+        chapter_suggestions = suggest_chapters(pages,crop) if args.auto_chapters else []
+        if args.auto_chapters:
+            qa['alerts'].append({'code':'provisional_chapters','severity':'review',
+                'message':'Automatically suggested chapters require manual confirmation; no speaker identification.'})
+            chapters = chapter_suggestions
+        # Compute ALL outputs before writing, avoiding partial overwrites if a
+        # later contact sheet/preview already exists.
+        expected_contacts = [contact_path]+[contact_path.with_name(contact_path.stem+'-%03d'%i+contact_path.suffix)
+                                            for i in range(2,(len(pages)-1)//120+2)]
+        preflight([report_path,layout_path,*expected_contacts],args.overwrite)
+        if chapters and args.auto_chapters and not args.overwrite:
+            preflight([output.parent/(output.stem+'-chapters')/
+                       ('%02d_%s.pdf'%(i+1,c['title'])) for i,c in enumerate(chapters)],False)
+        print('Sampled %d fixed + %d scene frames; retained %d candidate pages; crop=%s' %
+              (len(fixed),len(frames)-len(fixed),len(pages),crop))
+        save_pdf(pages,crop,output,overwrite=args.overwrite)
+        contacts = save_contact_sheets(pages,crop,contact_path,overwrite=args.overwrite)
+        save_layout_preview(frames,crop,layout_path,overwrite=args.overwrite)
+        chapter_results = build_chapters(pages,chapters,crop,output,args.overwrite) if chapters else []
+        report = {'version':'1.2','input_type':source_kind(args.source),
+                  'input_name':Path(urlsplit(args.source).path).name if source_kind(args.source)=='url'
                   else Path(args.source).name,
-                  'pdf': str(output), 'contact_sheet': str(contact_path),
-                  'sampled_frames': len(frames), 'pages': len(pages),
-                  'sampling_fps': args.fps, 'frame_size': [w,h], 'crop_xyxy': list(crop),
-                  'page_times_sec': [p['start_sec'] for p in pages],
-                  'chapters': chapter_results,
-                  'note': 'Candidate slide boundaries need visual review for complex layouts.'}
-        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
-        print('PDF:', output)
-        print('Contact sheet:', contact_path)
-        print('Report:', report_path)
+                  'pdf':str(output),'contact_sheet':str(contact_path),
+                  'contact_sheets':[str(x) for x in contacts],
+                  'layout_preview':str(layout_path),
+                  'sampled_frames':len(frames), 'fixed_frames':len(fixed),
+                  'extra_scene_frames':len(frames)-len(fixed),'scene_boost':scene,
+                  'pages':len(pages), 'sampling_fps':args.fps,
+                  'frame_size':[w,h],'crop_xyxy':list(crop),'layout':layout,
+                  'page_times_sec':[p['start_sec'] for p in pages],
+                  'chapters':chapter_results, 'chapter_suggestions':chapter_suggestions,'quality':qa,
+                  'note':'Candidate pages and warnings are heuristic; inspect previews for completeness.'}
+        report_path.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+        print('PDF:',output)
+        print('Contact sheets:',len(contacts),'Layout preview:',layout_path)
+        print('Report:',report_path,'Flagged pages:',qa['review_count'])
         return report
 
 
@@ -426,9 +536,18 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('source', help='Local video path or an authorized direct HTTP(S) video URL')
     parser.add_argument('--output', '-o', help='Output PDF path (default: current directory)')
-    parser.add_argument('--fps', type=float, default=1.0, help='Frame samples per second (default: 1)')
-    parser.add_argument('--crop', help='Manual x,y,width,height in fractions or pixels; otherwise detect black bars')
+    parser.add_argument('--fps', type=float, default=2.0, help='Base samples per second (default: 2; maximum: 5)')
+    parser.add_argument('--scene-boost', action=argparse.BooleanOptionalAction, default=True,
+                        help='Detect extra scene-cut frames at original frame rate (on by default)')
+    parser.add_argument('--scene-threshold', type=float, default=0.13,
+                        help='FFmpeg scene-change sensitivity (default: .13; lower = more candidates)')
+    parser.add_argument('--max-scene-frames', type=int, default=1500, help='Limit additional scene frames (default: 1500)')
+    parser.add_argument('--layout', choices=('auto','blackbars','full'), default='auto',
+                        help='Crop policy: conservative auto presenter split, blackbars only or full')
+    parser.add_argument('--crop', help='Manual x,y,width,height in fractions/pixels; overrides auto layout')
     parser.add_argument('--chapters', help='Optional JSON list of chapter {start,title} objects')
+    parser.add_argument('--auto-chapters', action='store_true',
+                        help='Provisional visual section suggestions and PDFs (manual review required)')
     parser.add_argument('--dedup-threshold', type=float, default=0.025,
                         help='Fraction of replaced foreground content for slide changes (default: .025)')
     parser.add_argument('--max-frames', type=int, default=21600,
@@ -438,8 +557,9 @@ def main(argv=None):
     parser.add_argument('--keep-work', action='store_true', help='Retain extracted frames for diagnostics')
     parser.add_argument('--overwrite', action='store_true', help='Explicitly allow replacing existing outputs')
     args = parser.parse_args(argv)
-    if args.fps <= 0 or args.fps > 5 or args.max_frames < 1 or not 0 < args.dedup_threshold < 1:
-        parser.error('fps must be (0,5], max-frames >=1, and dedup-threshold must be (0,1)')
+    if (args.fps <= 0 or args.fps > 5 or args.max_frames < 1 or args.max_scene_frames < 1 or
+            not 0 < args.dedup_threshold < 1 or not 0.03 <= args.scene_threshold <= 0.7):
+        parser.error('fps (0,5], max-frames >=1, max-scene-frames >=1, scene-threshold [0.03,0.7], dedup-threshold (0,1)')
     try:
         import pybootstrap
         pybootstrap.ensure(('numpy', 'PIL', 'pymupdf', 'requests', 'imageio_ffmpeg'))

@@ -3,7 +3,7 @@ name: meeting-slide-pdf-pipeline
 description: 从本地视频文件或可访问的 HTTP(S) 视频直链提取幻灯片/关键画面，智能去重、去黑边并生成 PDF 与核查缩略图；可根据章节时间点拆分多个 PDF。可选把 PDF 上传飞书，或沿用基于会议议程表的自动分段及回填流程。适用于视频转幻灯片 PDF、录屏课件整理、讲座抽帧、会议视频切片、PDF 归档和云文档上传等请求；若无上传授权，默认只处理本地文件。
 ---
 
-# Video / lecture → slide PDF (v1.1)
+# Video / lecture → slide PDF (v1.2)
 
 ## 默认使用：通用、离线优先
 
@@ -28,7 +28,7 @@ python scripts/video_to_pdf.py "./conference.mp4" --crop 0,0,0.78,1 --output "./
 python scripts/video_to_pdf.py "./conference.mp4" --chapters examples/chapters.example.json
 ```
 
-输出：`*-slides.pdf`、`*-slides-contact.jpg`（缩略图总览）、`*-slides.json`（页数、起始时间、画面裁剪信息）。
+输出：`*-slides.pdf`、`*-slides-contact.jpg`（超过 120 页可有后续联系表）、`*-slides-layout.jpg`（裁剪预览）、`*-slides.json`（候选页、时间、布局证据与质量复核标记）。
 若使用 `--chapters`，额外生成 `*-slides-chapters/` 目录。通用模式不读取或写入飞书。
 默认只清理自己临时生成的解码帧，绝不删除源视频，`--keep-work` 可保留中间产物。
 输出存在时中止；只有用户明确要求替换才允许 `--overwrite`。
@@ -36,9 +36,9 @@ python scripts/video_to_pdf.py "./conference.mp4" --chapters examples/chapters.e
 ### 通用模式边界
 
 - 只接受本地视频与**用户有权限访问的直接视频文件 URL**。播放器网页、DRM、需登录下载的来源不能保证直接使用，也不应绕过认证或访问控制。
-- 抽帧缺省 1 fps，启发式识别“背景相同但内容替换”与渐显；**不是无漏页保证**。用缩略图总览核查，复杂布局/讲者小窗可指定 `--crop`；用户要求高完整性时提高 `--fps` 并人工复核。
-- `--crop` 省略时仅保守识别持续黑边；不会自动准确识别复杂画中画幻灯片边框。任意视频（比如纯人物采访）不是幻灯片视频，可能产生较多候选页。
-- `--chapters` 需用户提供 JSON 时间点；通用模式不凭空识别讲者身份，也不自动猜测议程。
+- 默认固定采样 2 fps，另做原视频帧率的场景切换补帧，以减少短暂幻灯片漏检；可通过 `--no-scene-boost` 关闭二次扫描。该策略依然**不能保证零漏页**；重点复核短暂页面、后半段和文字小改动。
+- `--crop` 省略时采用保守 `--layout auto`，只在强证据情况下裁掉持续动态的讲者侧栏；其它情况保留完整画面，`--layout blackbars|full` 可关闭高级自动裁剪。纯人物采访或复杂画中画仍可能产生较多候选页。
+- `--chapters` 使用权威 JSON 时间点。可选 `--auto-chapters` 只能基于明显的视觉重置生成**低置信度章节建议**，不能凭空识别讲者、主题或议程，结果必须复核。
 - 处理视频和上传 PDF 是不同授权：若用户只要求生成 PDF，不要把源视频或 PDF 传到第三方服务。
 
 ## 仅在用户明确要求上传时：独立飞书上传
@@ -71,5 +71,6 @@ python scripts/upload_pdf.py --help
 ```
 
 - 使用细节与跨平台安装：`README.md`；安全要求：`SECURITY.md`。
-- 复杂布局下执行结果不能仅凭自动页数认定完整，需查看联系表 `*-contact.jpg`。
+- 必须查看 `*-layout.jpg` 红框及全部 `*-contact*.jpg`，检查 `*-slides.json` 的 `quality.alerts` 与 `quality.pages[].review_flags`；质量标记是人工复核线索，不是缺页准确性保证。
+- 质量限制及参数见 [references/quality-v12.md](references/quality-v12.md)。
 - 不要将实际视频、表格、密钥、输出 PDF 或本机启动器打包进 Skill。

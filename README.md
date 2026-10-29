@@ -1,8 +1,8 @@
-# meeting-slide-pdf-pipeline v1.1 — Video to Slides PDF
+# meeting-slide-pdf-pipeline v1.2 — Video to Slides PDF
 
 把**本地视频或直接视频 URL** 提取为幻灯片 PDF，自动去重、保守去黑边、生成缩略图核查页。默认无需会议议程、飞书、JWT 或云端账号。需要时还可手动按章节拆分 PDF、上传至飞书，或使用原有会议批处理/议程自动归属与表格回填功能。
 
-> **当前状态：v1.1 通用基础版。** 自动识别使用启发式算法，演讲者小窗、动态背景、渐变和一秒内闪过的页面可能造成误检或漏检；重要资料必须检查缩略图总览。当前没有提供任何视频网页的登录/DRM 绕过功能。
+> **当前状态：v1.2 质量增强版。** 新增谨慎的讲者侧栏自动识别、原帧率场景切换补帧、裁剪预览、逐页 QA 标记和章节候选建议。启发式判断仍可能误检或漏检；重要资料必须检查预览及缩略图。当前没有提供任何视频网页的登录/DRM 绕过功能。
 
 ## 最快使用方式（无需飞书）
 
@@ -33,8 +33,9 @@ python scripts/video_to_pdf.py "https://example.org/lecture.mp4" --output "./lec
 | 产物 | 作用 |
 |---|---|
 | `lecture-slides.pdf` | 按时间顺序保留的候选幻灯片 |
-| `lecture-slides-contact.jpg` | 缩略图总览，检查漏页、重复页或摄像头画面 |
-| `lecture-slides.json` | 输入来源类型、帧数、页数、页起始时间、裁剪范围、章节结果 |
+| `lecture-slides-contact.jpg`（必要时附 `-002.jpg` 等） | 全部候选页面的缩略图，检查漏页和重复页；不截断长视频 |
+| `lecture-slides-layout.jpg` | 原画面红框标出选中的幻灯片裁剪范围 |
+| `lecture-slides.json` | 输入、帧数、布局判断、逐页复核提示、页面时间、章节结果与风险提醒 |
 
 结果默认写入**运行命令时的当前文件夹**，不会修改或删除原始视频。临时解码帧在正常运行结束或失败时清理；`--keep-work` 可以保留以便排错。已有输出默认不覆盖，须明确指定 `--overwrite`。
 
@@ -46,7 +47,7 @@ python scripts/video_to_pdf.py "https://example.org/lecture.mp4" --output "./lec
 python scripts/video_to_pdf.py "./lecture.mp4" --crop 0,0,0.78,1 --fps 2
 ```
 
-不指定 `--crop` 时只会保守识别黑边，不会自动识别所有画中画、侧栏或动态布局；请检查输出的缩略图总览，并在必要时用 `--crop` 重跑。适当提高 `--fps` 能改善短暂页面采样，但会增加计算量。
+不指定 `--crop` 时，默认 `--layout auto`：对多帧有明显分界线的讲者侧栏尝试自动裁剪；其他场景保持完整画面或仅裁黑边。不能保证识别所有画中画、侧栏或动态布局。请检查 `*-layout.jpg` 及缩略图，并在必要时用 `--crop` 重跑。默认固定采样 2 fps，并做额外 FFmpeg 场景切换补帧以找回短暂出现的页面；`--no-scene-boost` 可关闭第二次扫描，`--fps 5` 可提高固定采样密度，均不能保证零漏页。
 
 按已知时间点拆分章节（不需要云端议程表）：
 
@@ -55,6 +56,23 @@ python scripts/video_to_pdf.py "./conference.mp4" --chapters examples/chapters.e
 ```
 
 `examples/chapters.example.json` 是通用示例，可复制修改。每项包含 `start`（从视频开始算起的秒）与 `title`。生成总 PDF 之外，还生成 `*-slides-chapters/` 目录中的单章节 PDF；没有有效页面的章节会在报告中标记为 `empty`。
+
+## 质量检查与自动章节建议（v1.2）
+
+```bash
+# 保留完整原画面，不做自动裁剪
+python scripts/video_to_pdf.py "lecture.mp4" --layout full
+# 不同的短页采样策略（更耗计算资源）
+python scripts/video_to_pdf.py "lecture.mp4" --fps 5 --scene-threshold 0.08
+# 基于明显的标题/版式切换提出低置信度章节建议并尝试分段
+python scripts/video_to_pdf.py "conference.mp4" --auto-chapters
+```
+
+检查 `*-slides.json` 中的 `quality.alerts` 和 `quality.pages[].review_flags`；短页、低细节页、较长的无换页区间会提示人工检查。`*-layout.jpg` 用红框展示实际裁剪区域。对于超过 120 个候选页面的录播，自动生成后续 `*-contact-002.jpg` 等联系表以避免遗漏后半部分。
+
+`--auto-chapters` 只是**视觉启发式建议**，不能识别真实演讲者或主题。如果缺少足够的视觉线索，可能只输出一个章节；不要直接把这种分段当作准确议程使用。有权威议程和时间点时，优先使用 `--chapters`。
+
+完整边界、说明与复核清单见 [v1.2 质量复核指南](references/quality-v12.md)。
 
 ## 可选：把 PDF 上传飞书，不回填表格
 
@@ -90,7 +108,7 @@ python scripts/video_to_pdf.py --help
 python scripts/upload_pdf.py --help
 ```
 
-测试覆盖本地视频、HTTP 直链、黑边、浅色/深色背景、章节拆分、拒绝覆盖已有文件、上传 dry-run。完整真实会议视频、不同播放器网站和真实飞书上传仍需在有访问权限的实际环境中验证。
+测试覆盖本地视频、HTTP 直链、黑边、侧栏/全屏布局判断、短暂幻灯片场景补帧、多张缩略图、章节拆分、拒绝覆盖已有文件、上传 dry-run。完整真实会议视频、不同播放器网站和真实飞书上传仍需在有访问权限的实际环境中验证。
 
 ## 安全与隐私
 
