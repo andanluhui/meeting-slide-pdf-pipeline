@@ -58,6 +58,23 @@ python scripts/authenticated_video.py browser --url "https://portal.example.org/
 
 媒体域名由用户确认并明确允许；HAR 和浏览器 profile 可能包含登录数据，**绝不上传或共享**。脚本只记录脱敏任务结果。遇 401/403 需由用户重新登录并播放，不绕过 DRM 或站点授权。HLS/DASH 目前仅标记不支持。详细步骤见 [references/authenticated-sources.md](references/authenticated-sources.md)。
 
+## 从一场真实视频地址推导用户提供的其他场次（v1.3.1）
+
+用户在 EADV 一类网站中，已登录播放一场视频，且希望根据明确提供的其他场次编号批量下载时，优先检查视频 URL 是否具有相同的路径结构。**不要随意把播放器网页地址后缀改成 .mp4**；必须基于在 HAR 中已观察到的真实媒体请求。
+
+若 `HAR` 中有一个可确认的直接视频文件（例如 `/session/100/video.mp4`），且用户提供具有访问权限的 `session_ids.txt`，可运行：
+
+```bash
+# 先预览，不访问视频服务器
+python scripts/batch_by_pattern.py --har "network.har" --ids-file "session_ids.txt" --allow-host media.example.org --dry-run
+# 用户确认来源和编号后运行，并自动交给原 PDF 处理脚本
+python scripts/batch_by_pattern.py --har "network.har" --ids-file "session_ids.txt" --allow-host media.example.org --out "video-jobs"
+```
+
+自动按已观察到的 `session/ID` 等路径段推断待替换的编号；若 HAR 中有多个来源，需明确指定 `--example-id`。只能使用用户提供的编号，**禁止枚举、猜测或扫描其他场次**。网站若为每场视频分别签发链接，替换 ID 可能失败；401/403 时停止，不突破网站权限限制，也不访问 DRM 视频。HAR 内可能有登录凭证，绝不共享、上传或记录在日志中。详见 `references/authenticated-sources.md`。
+
+向非技术用户介绍时不要先讲 HAR、JWT、Playwright 等术语，优先说：**正常登录并播放一场 → 确认视频地址规律 → 核对场次清单 → 批量下载 → 输出 PDF**，由 Agent 执行技术步骤。
+
 ## 仅在用户明确要求上传时：独立飞书上传
 
 通用模式可以先输出 PDF，再选择性上传到飞书云空间；不需要表格和议程：

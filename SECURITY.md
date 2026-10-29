@@ -17,3 +17,9 @@
 - The downloader keeps request headers in memory and saves only sanitized media IDs, hostnames, and statuses in `media-report.json`. Do not print raw URLs or HAR contents in errors.
 - Use explicit `--allow-host` before downloading. Cross-host/port redirects do not inherit captured cookies or Authorization tokens. No access-control/DRM bypass.
 - Credentials accidentally exposed in a public repo or shared HAR must be revoked and rotated.
+
+## Authorized pattern-based batch downloads (v1.3.1)
+
+- Start only from a real media request observed while the user played an authorized video. Do not guess video file suffixes, generate unlisted session IDs, or scan a website for private videos.
+- Require explicit approval of the video host and a user-provided list of sessions that the user is authorized to access. If credentials are bound to individual sessions, a 401/403 response stops the batch; user must log in again or capture requests normally.
+- Treat HAR, private session lists, signed URLs, cookies and browser profiles as sensitive local files. Do not commit or share them.

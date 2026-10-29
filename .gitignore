@@ -71,3 +71,8 @@ private_browser_profile/
 **/private_browser_profile/
 *.part
 media-report.json
+
+# Private session lists used for authorized pattern downloads
+session_ids.txt
+session-ids.txt
+private_sessions.csv

@@ -1,148 +1,137 @@
-<h1 align="center">Video to Slides PDF</h1>
+<h1 align="center">Video to Slides PDF · 视频转幻灯片 PDF</h1>
 
-<p align="center"><strong>把会议录播、视频课程和演讲中的幻灯片，提取成可核对、可归档的 PDF。</strong></p>
-<p align="center">Extract slides from lectures & recordings → deduplicate → export PDF → review & archive.</p>
+<p align="center"><strong>不用对着视频一页页截图：自动找到幻灯片、去掉重复画面、整理成 PDF。</strong></p>
+<p align="center">适用于课程录屏、学术讲座、会议回放，以及需要先登录才能观看的视频。</p>
 
-<p align="center"><img src="assets/readme-showcase.jpg" alt="合成会议视频中的侧栏画面输入与提取后的三页幻灯片输出示例" width="100%"></p>
-<p align="center"><sub>图中是合成测试视频及实际处理结果，仅展示能力，不包含真实会议资料。</sub></p>
+<p align="center"><img src="assets/readme-showcase.jpg" alt="左侧是一段带讲者画面的测试视频，右侧是提取后的三张幻灯片" width="100%"></p>
+<p align="center"><sub>以上是用合成测试视频生成的真实处理结果，不包含任何会议或个人资料。</sub></p>
 
-<p align="center">
-  <a href="#quick-start">🚀 快速开始</a> ·
-  <a href="#features">✨ 核心功能</a> ·
-  <a href="#web-video">🔐 登录网站视频</a> ·
-  <a href="#install-skill">📦 安装 Skill</a> ·
-  <a href="#guide">📖 详细指南</a>
-</p>
+## 它可以帮你做什么？
 
-> **核心思路：先生成本地 PDF，再按需要上传。** 普通视频处理不依赖飞书、会议议程或登录凭证；只有访问受保护网页、上传云端时才需要额外授权和配置。
+| 你手里有什么 | 它可以做什么 |
+| --- | --- |
+| 电脑里的一段讲座、课程或录屏视频 | 提取幻灯片，去掉大部分重复画面，生成 PDF |
+| 很长的会议视频 | 按你提供的时间点拆成多份 PDF，并提供缩略图供检查 |
+| 登录后才能看的网页视频 | 在你正常登录、播放后，识别播放器实际读取的视频文件，再下载和整理 |
+| 一个会议网站里的许多场视频 | **如果视频地址有固定规律，可用一个已确认的地址加上场次编号，批量下载并生成 PDF** |
+| 已经做好的 PDF | 按需上传飞书；也能沿用原来的会议表格回填流程 |
 
-<a id="features"></a>
-## ✨ 能做什么？
+> **重要：** 不是任何网页都能下载。网站可能限制下载，或者每场视频采用不同的链接。Skill 不会绕过登录或版权保护。正式归档前仍要检查是否漏页。
 
-| 视频来源 | 内容整理 | 输出与扩展 |
-| :--- | :--- | :--- |
-| 📁 本地 MP4 / MOV 等视频 | ✂️ 去黑边、保守识别讲者侧栏 | 📄 按时间顺序生成 PDF |
-| 🔗 可访问的 HTTP(S) 视频直链 | 🧩 相似页面去重、场景变化补帧 | 🖼️ 全量缩略图与裁剪预览 |
-| 🔐 正常登录后的网页视频请求（HAR / 浏览器） | 🔎 标记疑似短页、模糊/空白候选页供复核 | 🗂️ 按指定时间点拆分章节 PDF |
-| 📚 多个已授权会议视频 | 🧭 视觉变化生成*低置信度*章节建议 | ☁️ 可选上传飞书；旧版议程匹配与表格回填 |
+## 最容易理解的使用方式：直接告诉你的 AI
 
-**适合**：课程录屏整理、学术讲座幻灯片归档、多讲者会议回放、团队内部知识库建设。
+如果你已经把这个 Skill 安装到支持运行本地脚本的 AI 工具（例如配置好的 Codex），可以像这样说：
 
-**当前边界**：不是通用视频下载器；不绕过登录、DRM，也不保证所有网页播放器都能提取视频。启发式抽帧无法保证零漏页，正式归档前请复核。
+> **整理一个本地视频：**“把这个视频里的 PPT 整理成 PDF，去掉重复页，保留原视频，并给我一份缩略图方便检查。”
 
-<a id="quick-start"></a>
-## 🚀 Quick start · 3 步开始
+> **处理需要登录的网站：**“我可以正常登录这个会议网站。请帮我找到播放器实际读取的视频文件，下载后整理成 PDF。请在下载前让我确认。”
 
-需要 **Python 3.10+**。从仓库下载源码（或使用 Git 克隆）并在仓库根目录执行：
+> **像 EADV 一样批量处理：**“我已经登录并播放过其中一场。请检查这些视频的地址有没有固定规律；如果有，就根据我提供的场次编号批量获取这些视频，再各自整理成 PDF。先列出将要处理的场次让我核对。”
+
+这样你不需要自己弄懂下面提到的代码或技术名词。**登录网站以及授权处理内容仍由你完成，AI 负责执行具体步骤。** 只有 Agent 具有运行程序和访问相关文件的能力时，才可以自动完成整套工作。
+
+## 📦 如何分享和安装？
+
+- **发给同事：** 把本仓库链接发给对方：`https://github.com/andanluhui/meeting-slide-pdf-pipeline`。如果仓库仍是私有的，需要先给同事 GitHub 访问权限。
+- **使用 Codex 等支持 Skills 的 AI：** 可以把仓库链接交给它，让它按照 `SKILL.md` 安装。部分客户端也支持 `npx skills add andanluhui/meeting-slide-pdf-pipeline`，但需要已经安装对应工具。
+- **手动安装：** 下载仓库 ZIP，解压，把包含 `SKILL.md` 的文件夹放到相应 AI 工具的 Skills 目录；第一次运行还需要安装视频处理依赖。
+
+**注意：** 发一个 GitHub 链接，不代表普通 ChatGPT 网页聊天就能自动运行你电脑上的程序；具体取决于同事使用的 AI 工具。
+
+## 输出结果长什么样？
+
+一次普通整理会得到：
+
+- **幻灯片 PDF：** 按出现的顺序汇总页面。
+- **缩略图总览：** 方便你快速查看是不是漏页或有重复页。
+- **裁剪预览：** 看看是否把讲者窗口误当成幻灯片。
+- **处理记录：** 标出哪些页面建议人工检查。
+
+默认**保留原视频、不覆盖已有文件、不自动上传**，只有你明确要求时才会上传飞书。
+
+## 如果网站没有“下载”按钮，怎么批量处理？
+
+这是这个 Skill 专门保留和增强的一条路线：
+
+1. 你正常登录会议网站，打开其中一场视频并点击播放。
+2. AI 或浏览器工具找到**这段视频真正的播放文件地址**。举个虚构的例子：`https://example.org/session/100/video.mp4`。
+3. 如果另一场的地址只差场次编号，例如 `.../session/101/video.mp4`，就能依据**你提供的、确实有权限访问的场次清单**逐场下载。
+4. 下载完自动交给原来的抽帧程序，生成各场次 PDF。
+
+这里不是随便把网页地址末尾改成 `.mp4`：必须先找到一个**实际播放过、确认是视频文件的地址**。如果网站不使用同一种规则，Skill 就返回原来的“逐场捕获视频”办法；如果网站提示没有权限，也不会跳过权限检查继续尝试。
+
+<details>
+<summary><strong>展开：自己操作时需要的命令和参数（一般用户可以不看）</strong></summary>
+
+### 准备环境
+
+需要 Python 3.10 或更新版本。下载/克隆仓库后在仓库根目录执行：
 
 ```bash
-# 1. 获取项目代码
-git clone https://github.com/andanluhui/meeting-slide-pdf-pipeline.git
-cd meeting-slide-pdf-pipeline
-
-# 2. 安装视频处理依赖
 python -m pip install -r scripts/requirements-core.txt
+```
 
-# 3. 本地视频 → PDF
+### 本地视频 → PDF
+
+```bash
 python scripts/video_to_pdf.py "lecture.mp4"
 ```
 
-> 当前仓库是 **Private**：克隆/安装需要账号已获得访问权限。公开发布后，他人才能免授权获取源码。Windows 可将 `python` 改为 `py`。
+也可以给一个直接返回视频文件的 HTTP(S) 链接；播放器网页地址本身并不等于视频文件地址。
 
-运行完成后，在**当前文件夹**得到：
+### 从已登录网站找出视频
+
+先在浏览器登录并播放视频，使用开发者工具的 **Network（网络请求）** 导出 **HAR** 文件（浏览器保存的网络记录）。HAR 可能含登录信息，**只能保存在私有工作区，不要上传到 GitHub 或发给其他人**。
+
+```bash
+# 先看看找到的是什么网站，不下载
+python scripts/authenticated_video.py har --har "network.har" --dry-run
+
+# 确认后下载；域名只是假设示例，需替换为实际视频服务器
+python scripts/authenticated_video.py har --har "network.har" --allow-host media.example.org --out "video-jobs"
+```
+
+不想导出 HAR 时，也可以使用浏览器模式（需要额外安装 Playwright）；参见 [已登录网页视频操作指南](references/authenticated-sources.md)。
+
+### 按确认过的地址规律批量下载（新增）
+
+将你有访问权限的场次编号保存在 `session_ids.txt`，每行一个。例如：
 
 ```text
-lecture-slides.pdf           ← 去重后的幻灯片
-lecture-slides-contact.jpg   ← 缩略图总览（长视频可分多张）
-lecture-slides-layout.jpg    ← 裁剪范围预览
-lecture-slides.json          ← 页时间戳与复核标记
+100
+101
+102
 ```
 
-默认**不修改/删除源视频，不覆盖已有结果，也不自动上传云端**。
-
-<a id="usage"></a>
-## 🧩 3 个常见使用场景
-
-**① 本地讲座 / 公开视频直链**
+在浏览器中**实际播放其中一个**，导出含视频请求的 HAR 文件，然后：
 
 ```bash
-python scripts/video_to_pdf.py "./lecture.mp4"
-python scripts/video_to_pdf.py "https://example.org/lecture.mp4" --output "lecture.pdf"
+# 先检查是否识别到规律，不下载
+python scripts/batch_by_pattern.py --har "network.har" --ids-file "session_ids.txt" --allow-host media.example.org --dry-run
+
+# 确认后才下载并生成 PDF
+python scripts/batch_by_pattern.py --har "network.har" --ids-file "session_ids.txt" --allow-host media.example.org --out "video-jobs"
 ```
 
-**② 长会议录播，需要章节 PDF**
+如果同一个网络记录中有多个视频、分不清示例是哪一个，可补充 `--example-id 100`，明确用哪场作为参考。`--download-only` 可只下载不生成 PDF。最多默认处理 300 个由用户明确列出的场次；不自动猜测、遍历其他编号。
 
-```bash
-python scripts/video_to_pdf.py "./conference.mp4" --chapters examples/chapters.example.json
-```
+**注意：** 这个模式目前经过模拟网站验证，但未在真实 EADV 网站验证。网站如使用每场单独生成的授权链接，替换编号可能失败；出现 401/403（网站拒绝访问）时会停止，要求重新登录或逐场获取。支持普通直接视频文件，不支持破解 DRM 或直接下载 HLS/DASH 播放流。
 
-也可以用 `--auto-chapters` 获取视觉变化提示，但**不是**准确的议程/讲者识别。复杂画面可用 `--layout full` 避免自动裁剪，或用 `--crop 0,0,0.78,1` 手动选择幻灯片区域。
+### 其他功能
 
-**③ 登录后才看得到的视频（如 EADV 类型的网站）**
-
-<a id="web-video"></a>
-使用你已获授权的账号正常登录并播放，导出浏览器 DevTools **Network → HAR**。先查看发现的视频域名：
-
-```bash
-python scripts/authenticated_video.py har --har "network.har" --dry-run
-```
-
-确认媒体域名后，再明确指定允许下载的主机：
-
-```bash
-python scripts/authenticated_video.py har --har "network.har" \
-  --allow-host media.example.org --out "./video-jobs"
-```
-
-如果不想导出 HAR，也支持 **Playwright 独立浏览器登录并捕获播放请求**，详见 [授权网页视频指南](references/authenticated-sources.md)。**真实 EADV 网站尚未实测**，部分播放平台可能需要专用适配器；HLS/DASH/DRM 不在当前支持范围。
-
-> ⚠️ **HAR、浏览器 Profile 可能包含 Cookie、Authorization 和签名 URL。不要发给同事、上传 GitHub 或交给公开服务。**
-
-<a id="install-skill"></a>
-## 📦 安装为 Agent Skill
-
-如果希望让 Codex 等支持 Skills 的 Agent 直接使用本仓库，提供两种入口：
-
-**方式 A · Agent Skills CLI（可选，需 Node.js）**
-
-```bash
-npx skills add andanluhui/meeting-slide-pdf-pipeline
-```
-
-CLI 会引导选择可用的 Agent 和安装范围；私有仓库需要本机已配置 GitHub 认证。这是第三方 Agent Skills CLI，**不是 ChatGPT 网页版的一键安装按钮**。安装 Skill 后，执行视频处理仍需安装上面的 Python 依赖。
-
-**方式 B · 手动安装**
-
-下载仓库 ZIP，把包含 `SKILL.md` 的整个文件夹放入所用 Agent 的 Skills 目录，然后按照该 Agent 的安装/重载说明操作。也可把仓库链接交给支持 GitHub 安装的 Codex `$skill-installer`。
-
-<a id="guide"></a>
-## 📖 按需使用高级能力
-
-| 你想做的事 | 入口 |
-| :--- | :--- |
-| 限制自动裁剪、提高采样频率、检查短页和误判 | [质量检查与参数说明](references/quality-v12.md) |
-| 登录后从网页请求批量发现视频、续传下载 | [授权网页视频指南](references/authenticated-sources.md) |
-| 把 PDF 上传飞书（不修改任何表格） | `python scripts/upload_pdf.py "lecture-slides.pdf" --dry-run`，参见 [SKILL.md](SKILL.md) |
-| 按既有议程自动分段、批量上传、飞书表格回填 | [旧版会议批处理指南](references/legacy-skill-guide.md) |
-| 处理个人凭证、临时视频及归档资料 | [安全与隐私说明](SECURITY.md) |
-
-<details>
-<summary><strong>环境说明、验证和常见问题</strong></summary>
-
-- **平台**：基础流程使用 Python 3.10+、PyMuPDF、Pillow、NumPy、Requests 和 FFmpeg（通过 `imageio-ffmpeg`）。适用于 Windows、macOS、Linux 的常规 Python 环境；具体设备与网站仍需验证。
-- **如何确认结果完整？** 查看所有 `*-contact*.jpg`、`*-layout.jpg` 和 `*-slides.json` 的 `quality.alerts` / `review_flags`，必要时调整采样和裁剪后重跑。
-- **为什么视频链接不能直接用？** 播放器网页地址 ≠ 可下载的视频字节 URL。已授权网页可考虑 HAR 或浏览器模式；DRM 不支持。
-- **会覆盖原 PDF 吗？** 默认拒绝覆盖；仅在你明确指定 `--overwrite` 时覆盖。
-- **质量如何验证？** 已有针对合成视频、短暂幻灯片、讲者侧栏、直链与授权下载的自动化测试；真实 EADV 登录页尚未实测。
-
-```bash
-python -m unittest discover -s tests -v
-python scripts/video_to_pdf.py --help
-python scripts/authenticated_video.py --help
-```
+- 已知章节起点：`python scripts/video_to_pdf.py "conference.mp4" --chapters examples/chapters.example.json`
+- 不裁剪原画面：`python scripts/video_to_pdf.py "lecture.mp4" --layout full`
+- 上传飞书前预览：`python scripts/upload_pdf.py "lecture-slides.pdf" --dry-run`（需单独配置已授权的飞书工具）
+- 运行测试：`python -m unittest discover -s tests -v`
 
 </details>
 
----
+## 更多说明（需要时再看）
 
-**项目定位**：通用、离线优先、可复核的视频转幻灯片 PDF Skill。欢迎在获得代码发布授权后用于团队协作；源视频、账号凭证与生成的 PDF 不应随代码公开。
+- [登录后网页视频获取、批量下载及限制](references/authenticated-sources.md)
+- [如何检查幻灯片有没有漏页](references/quality-v12.md)
+- [原来的会议批量整理与飞书回填](references/legacy-skill-guide.md)
+- [安全和隐私注意事项](SECURITY.md)
+- [完整 Skill 工作说明](SKILL.md)
+
+*目前仍是私有仓库。公开分享前请确认相关代码和内容拥有公开发布权限。*

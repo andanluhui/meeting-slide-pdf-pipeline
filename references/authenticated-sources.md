@@ -50,6 +50,29 @@ python scripts/authenticated_video.py browser --url "https://portal.example.org/
 
 The browser profile is stored inside `video-jobs/private_browser_profile` unless `--profile-dir` overrides it. **This directory contains browser-managed session data and may retain login cookies on disk.** Keep it private. The downloader's in-memory request headers are not written to the task report. To sign out completely, sign out in the browser and remove the profile when it is no longer needed.
 
+## Route C: reuse a verified video-address pattern (EADV-style batch download, v1.3.1)
+
+**Plain-language summary:** Sign in normally, play one video and confirm its actual media request. If a *user-supplied list of authorized session IDs* uses the same URL structure, substitute only the session-number path segment, and download the listed sessions. This is not arbitrary `.mp4` suffix replacement and does not enumerate unknown sessions.
+
+Example verified request: `https://media.example.org/session/100/video.mp4`. Authorized IDs file `session_ids.txt` contains `100`, `101`, `102` on separate lines. Export a local HAR after playing video `100`, then run:
+
+```bash
+# First: preview without downloading anything
+python scripts/batch_by_pattern.py --har "network.har" --ids-file "session_ids.txt" \
+  --allow-host media.example.org --dry-run
+
+# Second: after confirming the source host and authorized session list
+python scripts/batch_by_pattern.py --har "network.har" --ids-file "session_ids.txt" \
+  --allow-host media.example.org --out "video-jobs"
+```
+
+- `--example-id 100` disambiguates if HAR contains more than one possible video.
+- Supported input lists: `.txt` one ID per line or `.csv` with an `id` column. No automatic scanning for other IDs; default limit is 300 explicitly listed sessions.
+- The actual observed video address, its host, and its file type must be valid. A player web page is **not** silently rewritten into a guessed MP4 URL.
+- The URL's signed query parameters, if any, remain unchanged during path substitution. They may apply to only the original session; if 401/403 occurs, the batch stops and the user must reauthenticate or capture video requests individually. No authentication/DRM bypass.
+- HAR credentials remain in memory only while processing; output reports omit raw URLs, cookies and tokens. Keep the HAR and `session_ids.txt` private.
+- Uses `media_sources.download_media` for host allowlisting, resumable downloads, and credential isolation; successful files pass to the same PDF generator. It does not guarantee EADV compatibility until tested with the real site.
+
 ## Output / failure behavior
 
 - Downloaded video: `<out>/videos/video-<id>.mp4` (or media-specific extension).
