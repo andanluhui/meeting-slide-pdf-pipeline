@@ -62,3 +62,12 @@ slide-work-*/
 *-layout.jpg
 *-contact-*.jpg
 *-slides-chapters/
+
+# Authenticated website adapter: private HARs, profiles, resumable media
+*.har
+*.har.zip
+video-jobs/
+private_browser_profile/
+**/private_browser_profile/
+*.part
+media-report.json

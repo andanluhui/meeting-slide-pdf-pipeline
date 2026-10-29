@@ -1,8 +1,33 @@
-# meeting-slide-pdf-pipeline v1.2 — Video to Slides PDF
+# meeting-slide-pdf-pipeline v1.3 — Video to Slides PDF
 
 把**本地视频或直接视频 URL** 提取为幻灯片 PDF，自动去重、保守去黑边、生成缩略图核查页。默认无需会议议程、飞书、JWT 或云端账号。需要时还可手动按章节拆分 PDF、上传至飞书，或使用原有会议批处理/议程自动归属与表格回填功能。
 
-> **当前状态：v1.2 质量增强版。** 新增谨慎的讲者侧栏自动识别、原帧率场景切换补帧、裁剪预览、逐页 QA 标记和章节候选建议。启发式判断仍可能误检或漏检；重要资料必须检查预览及缩略图。当前没有提供任何视频网页的登录/DRM 绕过功能。
+> **当前状态：v1.3 授权网页来源适配版。** 新增谨慎的讲者侧栏自动识别、原帧率场景切换补帧、裁剪预览、逐页 QA 标记和章节候选建议。启发式判断仍可能误检或漏检；重要资料必须检查预览及缩略图。当前新增 HAR 与正常浏览器登录后的媒体请求捕获功能，但不绕过站点认证、DRM 或授权限制。
+
+## 登录后的网页视频：EADV 等会议平台（v1.3）
+
+如果视频必须先登录网站，在开发者工具 Network 中才能看到 `video.mp4` 请求，可以使用**授权网络请求适配器**。不需要把登录密码或 JWT 填进 Skill，也无需修改现有 PDF 引擎。
+
+**方式 1：从浏览器开发者工具导出的 HAR 发现视频（最接近 EADV 历史流程）**：先正常登录、播放视频，在开发者工具 Network 导出本地 HAR；首次只检查域名，不下载：
+
+```bash
+python scripts/authenticated_video.py har --har "/private/work/network.har" --dry-run
+python scripts/authenticated_video.py har --har "/private/work/network.har" \
+  --allow-host media.example.org --out "/private/work/video-jobs"
+```
+
+**方式 2：通过独立浏览器正常登录并捕获请求**：只需安装一次可选依赖，然后在启动的浏览器里登录、打开视频页面并点击播放：
+
+```bash
+python -m pip install -r scripts/requirements-browser.txt
+python -m playwright install chromium
+python scripts/authenticated_video.py browser --url "https://portal.example.org/videos" \
+  --allow-host media.example.org --out "/private/work/video-jobs"
+```
+
+适配器会检查播放请求、去重、下载媒体，再调用通用 PDF 引擎。`--download-only` 只下载；`--pages-file` 可批量访问已有授权页面；`--dry-run` 只检查候选资源。实际视频网站的媒体域名需根据网络请求确认，以上域名均为占位示例。页面里没有观察到 MP4 等直接视频资源时，不会假称下载成功。HLS/DASH/DRM 尚未支持。
+
+**敏感信息提醒：** HAR 可能包含 Cookie、Authorization 和签名 URL；Playwright 专用浏览器资料目录会在本机保存登录状态。两者都必须放在私有工作区，不能分享或提交 GitHub。输出报告不包含原始链接/凭证。完整操作及限制见 [授权网页视频获取指南](references/authenticated-sources.md)。
 
 ## 最快使用方式（无需飞书）
 

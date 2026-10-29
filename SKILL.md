@@ -1,9 +1,9 @@
 ---
 name: meeting-slide-pdf-pipeline
-description: 从本地视频文件或可访问的 HTTP(S) 视频直链提取幻灯片/关键画面，智能去重、去黑边并生成 PDF 与核查缩略图；可根据章节时间点拆分多个 PDF。可选把 PDF 上传飞书，或沿用基于会议议程表的自动分段及回填流程。适用于视频转幻灯片 PDF、录屏课件整理、讲座抽帧、会议视频切片、PDF 归档和云文档上传等请求；若无上传授权，默认只处理本地文件。
+description: 从本地视频文件、可访问的 HTTP(S) 视频直链或经正常登录授权的网页视频请求提取幻灯片/关键画面，智能去重、去黑边并生成 PDF 与核查缩略图；可根据章节时间点拆分多个 PDF。可选把 PDF 上传飞书，或沿用基于会议议程表的自动分段及回填流程。支持从浏览器导出 HAR、用户登录后的网络请求中批量发现媒体并下载（不绕过登录/DRM），再进行 PDF 整理。适用于视频转幻灯片 PDF、录屏课件整理、讲座抽帧、会议视频切片、PDF 归档和云文档上传等请求；若无上传授权，默认只处理本地文件。
 ---
 
-# Video / lecture → slide PDF (v1.2)
+# Video / lecture → slide PDF (v1.3)
 
 ## 默认使用：通用、离线优先
 
@@ -40,6 +40,23 @@ python scripts/video_to_pdf.py "./conference.mp4" --chapters examples/chapters.e
 - `--crop` 省略时采用保守 `--layout auto`，只在强证据情况下裁掉持续动态的讲者侧栏；其它情况保留完整画面，`--layout blackbars|full` 可关闭高级自动裁剪。纯人物采访或复杂画中画仍可能产生较多候选页。
 - `--chapters` 使用权威 JSON 时间点。可选 `--auto-chapters` 只能基于明显的视觉重置生成**低置信度章节建议**，不能凭空识别讲者、主题或议程，结果必须复核。
 - 处理视频和上传 PDF 是不同授权：若用户只要求生成 PDF，不要把源视频或 PDF 传到第三方服务。
+
+## 授权网页视频：EADV 等需登录的视频网站（v1.3）
+
+用户已正常登录但需要从开发者工具中查找视频请求时，使用 `scripts/authenticated_video.py`，不要把登录密码放进命令或 Git。
+
+```bash
+# 先在浏览器中正常登录并播放视频，然后导出本地网络 HAR：
+python scripts/authenticated_video.py har --har "/private/work/network.har" --dry-run
+python scripts/authenticated_video.py har --har "/private/work/network.har" --allow-host media.example.org --out "/private/work/video-jobs"
+
+# 可选：使用专用浏览器会话，通过正常页面登录、播放并捕获网络资源
+python -m pip install -r scripts/requirements-browser.txt
+python -m playwright install chromium
+python scripts/authenticated_video.py browser --url "https://portal.example.org/videos" --allow-host media.example.org --out "/private/work/video-jobs"
+```
+
+媒体域名由用户确认并明确允许；HAR 和浏览器 profile 可能包含登录数据，**绝不上传或共享**。脚本只记录脱敏任务结果。遇 401/403 需由用户重新登录并播放，不绕过 DRM 或站点授权。HLS/DASH 目前仅标记不支持。详细步骤见 [references/authenticated-sources.md](references/authenticated-sources.md)。
 
 ## 仅在用户明确要求上传时：独立飞书上传
 

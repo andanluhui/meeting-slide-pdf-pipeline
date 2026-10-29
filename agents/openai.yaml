@@ -1,6 +1,6 @@
 interface:
   display_name: Video to Slides PDF
-  short_description: 从本地或视频直链生成幻灯片 PDF；自动识别部分讲者侧栏、补捉短暂页面，提供裁剪预览、质量复核和章节建议。可选飞书上传与批量回填。
+  short_description: 从本地视频、直链或已授权登录的网页视频请求生成 PDF；支持 HAR/浏览器捕获、去重、质量复核和可选飞书上传。
   icon_small: assets/icon.svg
   icon_large: assets/icon.svg
 policy:

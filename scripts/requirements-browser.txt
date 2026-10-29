@@ -1,0 +1,2 @@
+-r requirements-core.txt
+playwright>=1.45
