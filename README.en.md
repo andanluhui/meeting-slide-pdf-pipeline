@@ -16,7 +16,7 @@
 | A direct, accessible video file link | The same PDF output without manually downloading first |
 | A long lecture or conference recording | Optional chapter PDFs, plus thumbnails for checking the results |
 | A web video that requires sign-in | Video discovery and download **after you authorize access in the environment doing the work** |
-| Several authorized sessions with predictable media URLs | Batch processing of the session IDs you explicitly provide, when that site permits it |
+| Multiple authorized recordings on a website | Organize your approved list of recordings into PDFs when the site permits it |
 | A completed PDF | Optional Feishu upload; the existing specialized meeting workflow can also update its spreadsheets |
 
 The default output stays on your computer: a **slide PDF**, a **thumbnail overview**, a **crop preview**, and a **review report**. It does not automatically delete the source video or upload files to the cloud.
@@ -35,7 +35,7 @@ This is an **Agent Skill**, not a standalone website or a hosted video downloade
 
 **For multiple sessions**, ask:
 
-> "Check whether the videos I am allowed to access follow the same address pattern. If they do, use only the session IDs I supply. Show me the proposed list before downloading anything."
+> "Please organize these meeting recordings into slide PDFs. Ask me to sign in within the browser you use if needed, and let me confirm the list before downloading."
 
 ## Signing in: an important distinction
 
@@ -82,8 +82,6 @@ To inspect an existing local HAR without downloading:
 ```bash
 python scripts/authenticated_video.py har --har "network.har" --dry-run
 ```
-
-If media addresses share a *verified* pattern and you already have an authorized list of session IDs, see [batch processing instructions](references/authenticated-sources.md). This feature does not invent session IDs or bypass access checks.
 
 </details>
 

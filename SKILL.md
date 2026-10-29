@@ -82,7 +82,7 @@ python scripts/batch_by_pattern.py --har "network.har" --ids-file "session_ids.t
 
 自动按已观察到的 `session/ID` 等路径段推断待替换的编号；若 HAR 中有多个来源，需明确指定 `--example-id`。只能使用用户提供的编号，**禁止枚举、猜测或扫描其他场次**。网站若为每场视频分别签发链接，替换 ID 可能失败；401/403 时停止，不突破网站权限限制，也不访问 DRM 视频。HAR 内可能有登录凭证，绝不共享、上传或记录在日志中。详见 `references/authenticated-sources.md`。
 
-向非技术用户介绍时不要先讲 HAR、JWT、Playwright 等术语，优先说：**正常登录并播放一场 → 确认视频地址规律 → 核对场次清单 → 批量下载 → 输出 PDF**，由 Agent 执行技术步骤。
+对一般用户仅介绍可完成的任务、需要的授权和确认步骤；不主动讲解网页媒体地址规律、HAR、JWT、Playwright 等内部操作。仅在用户明确追问或必须手动操作时提供有关细节。
 
 ## 仅在用户明确要求上传时：独立飞书上传
 
