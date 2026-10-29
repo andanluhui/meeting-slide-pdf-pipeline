@@ -1,0 +1,46 @@
+{
+  "base": "C:/path/to/meeting-workspace",
+  "tmp_root": "E:/big_tmp",
+  "tasks_file": "_work/tasks.json",
+  "progress_file": "_work/progress.json",
+  "final_report": "_work/final_report.json",
+  "fillsync_log": "_work/fillsync_log.json",
+  "pdf_dir": "pdf",
+  "final_dir": "pdf_final",
+
+  "lark_cli": "C:/path/to/lark-cli.cmd",
+  "spreadsheet": "填写表格 token",
+  "sheets": {
+    "day1": "REPLACE_WITH_SHEET_ID_1",
+    "day2": "REPLACE_WITH_SHEET_ID_2"
+  },
+  "pdf_header": "PDF文件",
+  "folder_token": "填写云空间文件夹 token",
+  "file_url_prefix": "https://your-tenant.feishu.cn/file/",
+
+  "jwt": "",
+  "jwt_file": "_jwt.txt",
+  "video_url_tpl": "https://video.example.com/session/{mid}/video.mp4",
+
+  "slide_box": [14, 155, 1444, 959],
+  "speaker_box": [1395, 465, 1910, 645],
+
+  "download_jobs": 8,
+
+  "fps": "1",
+  "switch_min_diff": 12,
+  "switch_burst_win": 8,
+  "page_min_edge": 0.045,
+  "dedup_lost_ratio": 0.12,
+  "discard_single_page_sec": 300,
+  "anchor_score": 0.62,
+  "coi_anchor_score": 0.45,
+  "fallback_score": 0.35,
+
+  "purge": true,
+  "min_free_gb": 13.0,
+  "sys_disk": "C:\\",
+  "video_est_gb": 2.5,
+  "purge_min_interval_h": 6,
+  "keep_deliverables": ["pdf", "pdf_final"]
+}

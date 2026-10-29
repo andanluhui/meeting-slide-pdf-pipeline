@@ -1,0 +1,13 @@
+# meeting-slide-pdf-pipeline 依赖
+# 装法（推荐装进工作区自己的虚拟环境）：
+#   python -m venv .venv
+#   .venv\Scripts\pip install -r scripts/requirements.txt
+# 脚本启动时会自动找到这套解释器（见 scripts/pybootstrap.py），无需手工指定路径。
+#
+# 版本组合按会议视频处理项目的实测环境整理（未固定小版本，避免锁死）。
+numpy>=2.0
+pymupdf>=1.24
+pillow>=10.0
+requests>=2.31
+imageio-ffmpeg>=0.4        # 抽帧用，自带 ffmpeg 二进制
+rapidocr-onnxruntime>=1.3  # 切段用的轻量 OCR
