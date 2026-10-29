@@ -14,12 +14,12 @@
 | --- | --- |
 | A video file on your computer | A PDF of candidate slides, with repeated frames reduced |
 | A direct, accessible video file link | The same PDF output without manually downloading first |
-| A long lecture or conference recording | Optional chapter PDFs, plus thumbnails for checking the results |
+| A long lecture or conference recording | Optional chapter PDFs |
 | A web video that requires sign-in | Video discovery and download **after you authorize access in the environment doing the work** |
 | Multiple authorized recordings on a website | Organize your approved list of recordings into PDFs when the site permits it |
 | A completed PDF | Optional Feishu upload; the existing specialized meeting workflow can also update its spreadsheets |
 
-The default output stays on your computer: a **slide PDF**, a **thumbnail overview**, a **crop preview**, and a **review report**. It does not automatically delete the source video or upload files to the cloud.
+The PDF is saved locally. The agent should check its work before delivering the result. The original video is not deleted, and nothing is uploaded to a cloud service unless you request it.
 
 ## Get started in plain language
 
@@ -27,7 +27,7 @@ This is an **Agent Skill**, not a standalone website or a hosted video downloade
 
 **For a local video**, ask your agent:
 
-> "Please turn this lecture recording into a slide PDF. Remove repeated frames, keep the original video, and give me a thumbnail overview to check for missed slides."
+> "Please turn this lecture recording into a slide PDF. Remove repeated frames, keep the original video, check the result, and give me the PDF."
 
 **For a video on a sign-in website**, ask:
 
@@ -87,7 +87,7 @@ python scripts/authenticated_video.py har --har "network.har" --dry-run
 
 ## Understand the limits
 
-- This tool cannot guarantee that every slide is captured or that every duplicate is removed. Review the thumbnail overview and the per-page quality flags.
+- This tool cannot guarantee that every slide is captured or every duplicate removed. The agent should first inspect the result, fix what it can, and disclose any important unresolved issues.
 - Not every player exposes an ordinary downloadable video file. Some sites use HLS/DASH streaming or DRM, which this source adapter does not handle.
 - Real-world website flows vary. Site-specific support, including EADV, has **not** been validated on every current site version.
 - Having a valid login does not automatically mean that downloading is permitted. Follow the website's rules and your content permissions.
@@ -96,7 +96,6 @@ python scripts/authenticated_video.py har --har "network.har" --dry-run
 ## More information
 
 - [How website authorization and media discovery work](references/authenticated-sources.md)
-- [Slide quality checks](references/quality-v12.md)
 - [Original advanced meeting/Feishu workflow](references/legacy-skill-guide.md)
 - [Safety and privacy](SECURITY.md)
 - [Skill instructions for an AI agent](SKILL.md)

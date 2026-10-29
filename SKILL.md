@@ -28,7 +28,7 @@ python scripts/video_to_pdf.py "./conference.mp4" --crop 0,0,0.78,1 --output "./
 python scripts/video_to_pdf.py "./conference.mp4" --chapters examples/chapters.example.json
 ```
 
-输出：`*-slides.pdf`、`*-slides-contact.jpg`（超过 120 页可有后续联系表）、`*-slides-layout.jpg`（裁剪预览）、`*-slides.json`（候选页、时间、布局证据与质量复核标记）。
+内部产物：`*-slides.pdf`、`*-slides-contact.jpg`（超过 120 页可有后续联系表）、`*-slides-layout.jpg`（裁剪预览）、`*-slides.json`（候选页、时间、布局证据与质量复核标记）。默认交付 PDF，其余文件供 Agent 自检使用。
 若使用 `--chapters`，额外生成 `*-slides-chapters/` 目录。通用模式不读取或写入飞书。
 默认只清理自己临时生成的解码帧，绝不删除源视频，`--keep-work` 可保留中间产物。
 输出存在时中止；只有用户明确要求替换才允许 `--overwrite`。
@@ -114,6 +114,7 @@ python scripts/upload_pdf.py --help
 ```
 
 - 使用细节与跨平台安装：`README.md`；安全要求：`SECURITY.md`。
-- 必须查看 `*-layout.jpg` 红框及全部 `*-contact*.jpg`，检查 `*-slides.json` 的 `quality.alerts` 与 `quality.pages[].review_flags`；质量标记是人工复核线索，不是缺页准确性保证。
+- **结果自检由执行的 Agent 负责，不默认交给用户。** 生成 PDF 后，Agent 应检查视频是否成功处理、PDF 是否可打开且页数合理；自行核查 `*-layout.jpg` 的裁剪范围、全部 `*-contact*.jpg` 的重复/遗漏迹象，以及 `*-slides.json` 的 `quality.alerts` / `quality.pages[].review_flags`。发现风险时，结合原视频对应时间段复核，能通过调整裁剪、采样密度或去重参数改善的，应自行重跑并复查。质量标记只是检查线索，不能保证零漏页。
+- **交付默认只提供用户要求的 PDF（或一组 PDF）**，不要要求用户逐项检查缩略图、裁剪图和处理记录，也不要默认把这些调试文件作为成果介绍。只有用户明确要求或存在确实无法消除的重要问题时，才提供相关核查资料或请求必要协助；如无法完成充分复核，必须明确说明实际限制，不得声称已保证无漏页。
 - 质量限制及参数见 [references/quality-v12.md](references/quality-v12.md)。
 - 不要将实际视频、表格、密钥、输出 PDF 或本机启动器打包进 Skill。
